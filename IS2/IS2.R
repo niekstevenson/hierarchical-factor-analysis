@@ -42,7 +42,7 @@ IS2 <- function(samples, filter, IS_samples = 500, n_particles = 100, n_cores = 
 }
 
 get_sub_weights <- function(n_particles, condMean, condVar, prop_theta, info, sub){
-  wmix = c(.05, .95)
+  wmix = .95
   n1=rbinom(n=1,size=n_particles,prob=wmix)
   if (n1<2) n1=2
   if (n1>(n_particles-2)) n1=n_particles-2 ## These just avoid degenerate arrays.

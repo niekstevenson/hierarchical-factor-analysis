@@ -1,4 +1,4 @@
-#Script for testing the recovery of factor pmwg s
+#Script for testing the recovery of factor models with custom 
 
 rm(list = ls())
 source("pmwg/variants/factor.R")
@@ -8,10 +8,10 @@ ll <- function(pars, data){
   return(sum(dmvnorm(as.matrix(data[,2:(1 + n_pars)]), pars, diag(1, nrow = n_pars), log = T)))
 }
 
-n_pars <- 15 # j = 1... p; # p with j = 1... p 
-n_subjects <-20 # n
-n_trials <- 200      #number trials per subject per conditions
-n_factors <- 2
+n_pars <- 15 # number of parameters
+n_subjects <-20 # number of subjects
+n_trials <- 200 #number trials per subject per condition
+n_factors <- 2 # number of factors
 
 parNames <- paste0("V", 1:n_pars)
 
@@ -44,13 +44,7 @@ n_cores <- 8
 # sampler <- init(sampler, n_cores = n_cores) # i don't use any start points here
 
 # Sample! -------------------------------------------------------------------
-# burned <- run_stage(sampler, stage = "burn",iter = 500, particles = 150, n_cores = n_cores , pstar = .6)
-# save(burned, file = paste0("samples/factor_", n_factors, "F_", n_subjects, "S_", n_pars, "P_FactRecovery_burned.RData"))
-load("~/Documents/UVA/2022/pmwg_new/samples/factor_2F_20S_15P_FactRecovery_burned.RData")
-adapted <- run_stage(burned, stage = "adapt",iter = 1500, particles = 100, n_cores = n_cores, pstar = .6, min_unique = 200, n_cores_conditional = n_cores)
-sampled <- run_stage(adapted, stage = "sample",iter = 100, particles = 100, n_cores = n_cores, pstar = .6, n_cores_conditional = n_cores)
-sampled <- run_stage(sampled, stage = "sample",iter = 700, particles = 100, n_cores = n_cores, pstar = .6, n_cores_conditional = n_cores)
-
-save(sampled, file = paste0("factor_old_", n_factors, "F_", n_subjects, "S_", n_pars, "P_FactRecovery.RData"))
-
+burned <- run_stage(sampler, stage = "burn",iter = 1500, n_cores = n_cores)
+adapted <- run_stage(burned, stage = "adapt",iter = 5000,n_cores = n_cores)
+sampled <- run_stage(adapted, stage = "sample",iter = 1500,n_cores = n_cores)
 

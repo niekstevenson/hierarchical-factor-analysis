@@ -4,7 +4,9 @@ rm(list = ls())
 source("pmwg/variants/blocked.R")
 
 library(rtdists)
+library(MCMCpack)
 
+# Define the joint ll
 joint_ll <- function(x, data){
   parPreFixs <- gsub("[|].*", "", names(x))
   totalSum <- 0
@@ -17,6 +19,7 @@ joint_ll <- function(x, data){
   return(totalSum)
 }
 
+# Define the individual LBA log_likelihood, this could be any likelihood
 log_likelihood=function(x,data, sample=TRUE) {
   x <- exp(x)
   bPars <- grep("b", names(x))
@@ -36,11 +39,13 @@ log_likelihood=function(x,data, sample=TRUE) {
 n.trials <- 80      #number trials per subject per conditions
 n.subj <- 20 #number of subjects
 n.cond <- 3
-n.exp <- 1
+n.exp <- 2
 
 allparameters <- numeric()
 alldata <- list()
 
+# Simulate a joint model with different experiments that each have different conditions that effect the threshold, but the same amount per experiment. 
+# The data is fit with an lba for each experiment
 
 for(i in 1:n.exp){
   names=c("subject","rt","resp","condition") #names of columns
@@ -55,44 +60,19 @@ for(i in 1:n.exp){
   allparameters <- c(allparameters, parameters)
 }
 
-fillCorMatrix <- function(matrix, name1, name2, value){
-  matrix[grep(name1, rownames(matrix)), grep(name2, colnames(matrix))] <- value
-  matrix[grep(name2, rownames(matrix)), grep(name1, colnames(matrix))] <- value
-  return(matrix)
+covMat <- riwish(2.5*length(allparameters),diag(length(allparameters)))
+
+
+# Here I set one block per experiment, but other blocks could also be conceived of course
+Cov_blocked <- matrix(0, nrow = nrow(covMat), ncol = ncol(covMat))
+for(i in 1:n.exp){
+  idx <-((i-1)*(4+n.cond) + 1):(i*(4+n.cond))
+  Cov_blocked[idx, idx] <- covMat[idx, idx]
 }
-
-adjustCorMatrix <- function(matrix, adj){
-  #Was probably a cleverer way to do this
-  rowNames <- rownames(matrix)
-  for(i in 1:nrow(matrix)){
-    rowPreFix <- substr(rowNames[i], 0, 4)
-    matrix[i,!grepl(rowPreFix, colnames(matrix))] <- adj*matrix[i,!grepl(rowPreFix, colnames(matrix))] 
-  }
-  return(matrix)
-}
-
-exp(allparameters)
-n.parameters=length(allparameters)
-corMat <- matrix(0, nrow = n.parameters, ncol = n.parameters)
-rownames(corMat) <- colnames(corMat) <- names(allparameters)
-corMat[grep("A", rownames(corMat)),] <- .3 
-corMat[,grep("A", colnames(corMat))] <- .3 
-
-corMat <- fillCorMatrix(corMat, "v", "b", .25)
-corMat <- fillCorMatrix(corMat, "v", "v", .4)
-corMat <- fillCorMatrix(corMat, "b", "b", .4)
-corMat <- fillCorMatrix(corMat, "t0", "v", -.1)
-corMat <- fillCorMatrix(corMat, "t0", "b", -.25)
-corMat <- adjustCorMatrix(corMat, 0) #For blocked purposes we set between task correlations to 0
+corrplot::corrplot(cov2cor(Cov_blocked))
 
 
-
-vars = abs(allparameters)/15 #off diagonal correlations are done as absolute/10
-
-###std dev correlation on diagonal - you might think this should be corr = 1, but it's actually the standard deviation 
-diag(corMat)=sqrt(vars)
-
-subj_random_effects <- t(mvtnorm::rmvnorm(n.subj,mean=allparameters,sigma=corMat))
+subj_random_effects <- t(mvtnorm::rmvnorm(n.subj,mean=allparameters,Cov_blocked))
 exp(subj_random_effects)
 parPreFixs <- gsub("[|].*", "", rownames(subj_random_effects))
 df <- data.frame(subject = 1:n.subj)
@@ -113,21 +93,18 @@ for(i in 1:n.exp){
 pars <- rownames(subj_random_effects)
 # Create the Particle Metropolis within Gibbs sampler object ------------------
 
+
 sampler <- pmwgs(
   data = df,
   pars = pars,
   ll_func = joint_ll,
-  par_groups = c(rep(1, 3), rep(2, 3), 3)
+  par_groups = rep(1:n.exp, each = 4 + n.cond)
 )
 # start the sampler ---------------------------------------------------------
 sampler <- init(sampler, n_cores = 12) # i don't use any start points here
 
 # Sample! -------------------------------------------------------------------
-burned1 <- run_stage(sampler, stage = "burn",iter = 500, particles = 100, n_cores =6, pstar = .7)
-burned2 <- run_stage(sampler, stage = "burn",iter = 500, particles = 100, n_cores =6, pstar = .7)
-burned3 <- run_stage(sampler, stage = "burn",iter = 500, particles = 100, n_cores =6, pstar = .7)
-
-adapted1 <- run_stage(burned1, stage = "adapt", iter = 5000, particles = 100, n_cores = 6, pstar = .7)
-adapted <- run_stage(burned, stage = "adapt", iter = 5000, particles = 100, n_cores = 12, pstar = .7)
-sampled <- run_stage(adapted, stage = "sample", iter = 1000, particles = 100, n_cores = 12, pstar = .7)
+burned <- run_stage(sampler, stage = "burn",iter = 500, n_cores =12)
+adapted <- run_stage(burned, stage = "adapt", iter = 5000, n_cores = 12) # set up high, will drop-out early anyways
+sampled <- run_stage(sampled, stage = "sample", iter = 1000,n_cores = 12)
 

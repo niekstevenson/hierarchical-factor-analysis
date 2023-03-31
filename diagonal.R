@@ -1,9 +1,8 @@
-#Script for recovering a typical experiment 
+#Script for recovering a diagonal only estimation
 
 rm(list = ls())
-source("pmwg/variants/factor.R")
-
 library(rtdists)
+source("pmwg/variants/diag.R")
 
 log_likelihood=function(x,data, sample=F) {
   x <- exp(x)
@@ -20,7 +19,7 @@ log_likelihood=function(x,data, sample=F) {
   out
 }
 
-n.trials = 70       #number trials per subject per conditions
+n.trials = 75       #number trials per subject per conditions
 n.subj = 20          #number of subjects
 n.cond = 3          #number of conditions
 
@@ -38,18 +37,11 @@ ptm <- array(dim = n.parameters, dimnames = list(parameter.names)) #an empty arr
 
 ptm[1:n.parameters]=c(0.1,0.3,0.5,0.4,1.2,0.3,-2.4)
 exp(ptm)
-vars = abs(ptm)/10 #off diagonal correlations are done as absolute/10
+vars = abs(ptm)/7 #off diagonal correlations are done as absolute/10
 
-sigmaC <- matrix(c(.8, .5, .4, .15, .15, .3, -.15,
-                   .5, .8, .4, .2, .3, .3, .3,
-                   .4, .4, .8, .1, .1, .2, .2, 
-                   .15, .2, .1, .8, .2, .2, .1, 
-                   .15, .3, .1, .2, .8, .5, .2, 
-                   .3, .3, .2, .2, .5, .8, .1,
-                   -.15, .3, .2, .1, .2, .1, .8),
+sigmaC <- matrix(0,
                  nrow=7,ncol=7)
 
-###std dev correlation on diagonal - you might think this should be corr = 1, but it's actually the standard deviation 
 diag(sigmaC)=sqrt(vars)
 sigmaC <- sdcor2cov(sigmaC)
 
@@ -66,21 +58,18 @@ pars <- rownames(subj_random_effects)
 
 priors <- list(
   theta_mu_mean = rep(0, length(pars)),
-  theta_mu_var = diag(rep(1, length(pars)))
+  theta_mu_var = rep(1, length(pars))
 )
 
 sampler <- pmwgs(
   data = data,
   pars = pars,
-  ll_func = log_likelihood,
-  n_factors = 2
+  prior = priors,
+  ll_func = log_likelihood
 )
+sampler <- init(sampler, n_cores = 15) # i don't use any start points here
 
-n_cores = 10
-
-sampler <- init(sampler, n_cores = n_cores) # i don't use any start points here
-burned <- run_stage(sampler, stage = "burn",iter = 500, particles = 100, n_cores = n_cores, pstar = .7)
-adapted <- run_stage(burned, stage = "adapt", iter = 1000, particles = 100, n_cores = n_cores, pstar =.7)
-debug(variant_funs$get_conditionals)
-sampled <- run_stage(adapted, stage = "sample", iter = 500, particles = 100, n_cores = n_cores, pstar = .6)
-save(sampled, file = "standard.RData")
+# Sample! -------------------------------------------------------------------
+burned <- run_stage(sampler, stage = "burn",iter = 1000, n_cores = 8)
+adapted <- run_stage(burned, stage = "adapt", iter = 1000,n_cores = 15)
+sampled <- run_stage(adapted, stage = "sample", iter = 1000,n_cores = 15)

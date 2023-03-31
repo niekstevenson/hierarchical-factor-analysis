@@ -1,8 +1,9 @@
-#Script for recovering a diagonal only estimation
+#Script for recovering a typical experiment 
 
 rm(list = ls())
+source("pmwg/variants/standard.R")
+
 library(rtdists)
-source("pmwg/variants/diag.R")
 
 log_likelihood=function(x,data, sample=F) {
   x <- exp(x)
@@ -19,7 +20,7 @@ log_likelihood=function(x,data, sample=F) {
   out
 }
 
-n.trials = 75       #number trials per subject per conditions
+n.trials = 70       #number trials per subject per conditions
 n.subj = 20          #number of subjects
 n.cond = 3          #number of conditions
 
@@ -37,16 +38,10 @@ ptm <- array(dim = n.parameters, dimnames = list(parameter.names)) #an empty arr
 
 ptm[1:n.parameters]=c(0.1,0.3,0.5,0.4,1.2,0.3,-2.4)
 exp(ptm)
-vars = abs(ptm)/7 #off diagonal correlations are done as absolute/10
+covMat <- riwish(2.5*length(allparameters),diag(length(allparameters)))
 
-sigmaC <- matrix(0,
-                 nrow=7,ncol=7)
 
-###std dev correlation on diagonal - you might think this should be corr = 1, but it's actually the standard deviation 
-diag(sigmaC)=sqrt(vars)
-sigmaC <- sdcor2cov(sigmaC)
-
-subj_random_effects <- t(mvtnorm::rmvnorm(n.subj,mean=ptm,sigma=sigmaC))
+subj_random_effects <- t(mvtnorm::rmvnorm(n.subj,mean=ptm,sigma=covMat))
 
 
 for (i in 1:n.subj){
@@ -59,18 +54,18 @@ pars <- rownames(subj_random_effects)
 
 priors <- list(
   theta_mu_mean = rep(0, length(pars)),
-  theta_mu_var = rep(1, length(pars))
+  theta_mu_var = diag(rep(1, length(pars)))
 )
 
 sampler <- pmwgs(
   data = data,
   pars = pars,
-  prior = priors,
-  ll_func = log_likelihood
+  ll_func = log_likelihood,
 )
-sampler <- init(sampler, n_cores = 15) # i don't use any start points here
 
-# Sample! -------------------------------------------------------------------
-burned <- run_stage(sampler, stage = "burn",iter = 1000, particles = 100, n_cores = 8, pstar = .7)
-adapted <- run_stage(burned, stage = "adapt", iter = 1000, particles = 100, n_cores = 15, pstar =.7)
-sampled <- run_stage(adapted, stage = "sample", iter = 1000, particles = 100, n_cores = 15, pstar = .7)
+n_cores = 10
+
+sampler <- init(sampler, n_cores = n_cores) # i don't use any start points here
+burned <- run_stage(sampler, stage = "burn",iter = 1000, n_cores = n_cores)
+adapted <- run_stage(burned, stage = "adapt", iter = 1000, n_cores = n_cores)
+sampled <- run_stage(adapted, stage = "sample", iter = 1500,n_cores = n_cores)
