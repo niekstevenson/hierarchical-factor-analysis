@@ -21,7 +21,7 @@ ll_joint <- function(x,data,sample=FALSE) {
 
 # The likelihood of the cognitive model
 ll_cog <- function(x,data){
-  # Simple DDM
+  # Simple DDM with 2 conditions
   out1 <- rtdists::ddiffusion(data[data$cond == 1, ], a = exp(x["a"]), t0 = exp(x["t0"]),
                               v = x[1])
   out2 <- rtdists::ddiffusion(data[data$cond == 2, ], a = exp(x["a"]), t0 = exp(x["t0"]),
@@ -156,6 +156,9 @@ n_cores <- 12
 sampler <- init(sampler, n_cores = n_cores) # i don't use any start points here
 
 # Sample! -------------------------------------------------------------------
+# The other argument of relevance for the run_stage argument is n_particles.
+# Default is 100, but for harder models with more parameters I'd increase this up to maximally 250.
+
 burned <- run_stage(sampler, stage = "burn",iter = 1000,  n_cores = n_cores)
 adapted <- run_stage(burned, stage = "adapt",iter = 1500, n_cores = n_cores)
 sampled <- run_stage(adapted, stage = "sample",iter = 2000,  n_cores = n_cores)
@@ -191,3 +194,27 @@ plot_relations(sampled, cred = T) # will also plot 95% credible intervals
 # We can do the same for the implied correlation matrix
 plot_relations(sampled, cred = T, do_corr = T)
 
+# Now we can run IS2
+source("IS2/variants/factor.R")
+# IS_samples and n_particles are set to default
+# IS_samples is how many upper level IS samples you get
+# n_particles is just a step size, and will increase by this much until theoretical optimum has been reached.
+# See tran et al. 2021
+result <- IS2(sampled, filter = "sample", n_cores = 10,IS_samples = 1000, n_particles = 500)
+print(result$lw) # this is just the median
+
+# Do the bootstrapping to get the standard error
+result$finished # these are all the IS samples
+bootIS2 <- function(finished){
+  bootstrap = 10000
+  log_marglik_boot= array(dim = bootstrap)
+  for (i in 1:bootstrap){
+    log_weight_boot = sample(finished, length(finished), replace = TRUE) #resample with replacement from the lw
+    log_marglik_boot[i] <- median(log_weight_boot)
+    # max.boot <- max(log_weight_boot)
+    # centred.boot <- mean(exp(log_weight_boot-max.boot)) #takes off the max and gets mean (avoids infs)
+  }
+  return(var(log_marglik_boot))
+}
+
+bootIS2(result$finished) # This is the standard error on your estimates

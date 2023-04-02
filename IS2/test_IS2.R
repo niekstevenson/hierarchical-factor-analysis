@@ -1,7 +1,6 @@
 source("IS2/variants/standard.R")
 load("samples/standard.RData")
 #Make sure that any functions your LL calls are loaded here! (including packages)
-debug(IS2)
 result <- IS2(sampled, filter = "sample", n_cores = 6)
 print(result$lw)
 save(result, file = "IS2_1F.RData")
